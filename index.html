@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weird Mouse Pattern Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Use a custom font and dark theme for aesthetic appeal */
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        body {v            font-family: 'VT323', monospace;
+            background-color: #0d0c1d; /* Deep dark background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden; /* Hide scrollbars */
+        }
+        canvas {
+            display: block;
+            touch-action: none; /* Prevent unwanted touch actions on mobile */
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 10;
+            color: #ffffff;
+            font-size: 1rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+        #clearButton {
+            background-color: #4a4e69;
+            color: white;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-top: 5px;
+        }
+        #clearButton:hover {
+            background-color: #9a8c98;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="patternCanvas"></canvas>
+
+    <div id="controls">
+        <p class="text-xs text-gray-300">Move your mouse or finger!</p>
+        <button id="clearButton">Clear Canvas</button>
+    </div>
+
+    <script>
+        // --- Canvas and Context Setup ---
+        const canvas = document.getElementById('patternCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        // --- Configuration ---
+        const MAX_PARTICLES = 500;
+        const PARTICLE_SPEED_VARIATION = 0.8;
+        const PARTICLE_SIZE = 5;
+
+        // --- State Variables ---
+        let particles = [];
+        let mouse = { x: 0, y: 0, isActive: false };
+        let hue = 0;
+
+        /**
+         * Represents a single particle in the pattern.
+         */
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                // Initial velocity is towards the cursor position but randomized
+                this.vx = (Math.random() - 0.5) * PARTICLE_SPEED_VARIATION * 5;
+                this.vy = (Math.random() - 0.5) * PARTICLE_SPEED_VARIATION * 5;
+                
+                // Opacity will fade over time
+                this.opacity = 1;
+                this.fadeRate = Math.random() * 0.01 + 0.005; // Slower fade for a longer trail
+
+                // Size variation
+                this.size = Math.random() * PARTICLE_SIZE + 1;
+
+                // Store the particle's base hue (0-360)
+                this.hue = hue + Math.random() * 60;
+            }
+
+            // Update particle position and fade its opacity
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.opacity -= this.fadeRate;
+
+                // Slowly reduce velocity to simulate drag
+                this.vx *= 0.99;
+                this.vy *= 0.99;
+            }
+
+            // Draw the particle
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                
+                // FIX: Use HSLA (Hue, Saturation, Lightness, Alpha) for correct color fading.
+                ctx.fillStyle = `hsla(${this.hue}, 100%, 70%, ${this.opacity})`;
+                ctx.fill();
+            }
+        }
+
+        // --- Functions ---
+
+        /**
+         * Resizes the canvas to fill the viewport and updates dimensions.
+         */
+        function resizeCanvas() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+
+        /**
+         * Clears the particle array and redraws the canvas.
+         */
+        function clearCanvas() {
+            particles = [];
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = '#0d0c1d'; // Restore deep dark background
+            ctx.fillRect(0, 0, width, height);
+        }
+
+        /**
+         * The main animation loop.
+         */
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 1. Gently fade the previous frame to create trails (Ghosting effect)
+            ctx.fillStyle = 'rgba(13, 12, 29, 0.08)'; // Very slight dark overlay
+            ctx.fillRect(0, 0, width, height);
+            
+            // 2. Spawn new particles if the mouse is moving
+            if (mouse.isActive) {
+                // Spawn a few particles at the current mouse location
+                for (let i = 0; i < 4; i++) {
+                    if (particles.length < MAX_PARTICLES) {
+                        particles.push(new Particle(mouse.x, mouse.y));
+                    }
+                }
+                // Cycle the color hue for random colors
+                hue = (hue + 0.5) % 360;
+            }
+            
+            // 3. Update and draw particles
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update();
+                particles[i].draw();
+            }
+
+            // 4. Remove dead particles (opacity <= 0)
+            particles = particles.filter(p => p.opacity > 0);
+            
+            // Reset mouse activity flag
+            mouse.isActive = false;
+        }
+
+        /**
+         * Handles mouse/touch movement and sets the mouse position.
+         */
+        function handleMove(event) {
+            let clientX, clientY;
+
+            // Handle both mouse and touch events
+            if (event.touches) {
+                if (event.touches.length > 0) {
+                    clientX = event.touches[0].clientX;
+                    clientY = event.touches[0].clientY;
+                } else {
+                    return;
+                }
+            } else {
+                clientX = event.clientX;
+                clientY = event.clientY;
+            }
+
+            // Check if the mouse position has actually changed (prevents constant spawning)
+            if (mouse.x !== clientX || mouse.y !== clientY) {
+                mouse.x = clientX;
+                mouse.y = clientY;
+                mouse.isActive = true;
+            }
+        }
+
+
+        // --- Event Listeners and Initialization ---
+
+        window.addEventListener('resize', resizeCanvas);
+        canvas.addEventListener('mousemove', handleMove);
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // Prevents screen scrolling on mobile
+            handleMove(e);
+        });
+
+        // Set up the clear button
+        document.getElementById('clearButton').addEventListener('click', clearCanvas);
+
+        // Initial setup and start the loop
+        resizeCanvas();
+        animate();
+
+    </script>
+
+</body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weird Mouse Pattern Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Use a custom font and dark theme for aesthetic appeal */
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        body {
+            font-family: 'VT323', monospace;
+            background-color: #0d0c1d; /* Deep dark background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden; /* Hide scrollbars */
+        }
+        canvas {
+            display: block;
+            touch-action: none; /* Prevent unwanted touch actions on mobile */
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 10;
+            color: #ffffff;
+            font-size: 1rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+        #clearButton {
+            background-color: #4a4e69;
+            color: white;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-top: 5px;
+        }
+        #clearButton:hover {
+            background-color: #9a8c98;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="patternCanvas"></canvas>
+
+    <div id="controls">
+        <p class="text-xs text-gray-300">Move your mouse or finger!</p>
+        <button id="clearButton">Clear Canvas</button>
+    </div>
+
+    <script>
+        // --- Canvas and Context Setup ---
+        const canvas = document.getElementById('patternCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        // --- Configuration ---
+        const MAX_PARTICLES = 500;
+        const PARTICLE_SPEED_VARIATION = 0.8;
+        const PARTICLE_SIZE = 5;
+
+        // --- State Variables ---
+        let particles = [];
+        let mouse = { x: 0, y: 0, isActive: false };
+        let hue = 0;
+
+        /**
+         * Represents a single particle in the pattern.
+         */
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                // Initial velocity is towards the cursor position but randomized
+                this.vx = (Math.random() - 0.5) * PARTICLE_SPEED_VARIATION * 5;
+                this.vy = (Math.random() - 0.5) * PARTICLE_SPEED_VARIATION * 5;
+                
+                // Opacity will fade over time
+                this.opacity = 1;
+                this.fadeRate = Math.random() * 0.01 + 0.005; // Slower fade for a longer trail
+
+                // Size variation
+                this.size = Math.random() * PARTICLE_SIZE + 1;
+
+                // Store the particle's base hue (0-360)
+                this.hue = hue + Math.random() * 60;
+            }
+
+            // Update particle position and fade its opacity
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.opacity -= this.fadeRate;
+
+                // Slowly reduce velocity to simulate drag
+                this.vx *= 0.99;
+                this.vy *= 0.99;
+            }
+
+            // Draw the particle
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                
+                // FIX: Use HSLA (Hue, Saturation, Lightness, Alpha) for correct color fading.
+                ctx.fillStyle = `hsla(${this.hue}, 100%, 70%, ${this.opacity})`;
+                ctx.fill();
+            }
+        }
+
+        // --- Functions ---
+
+        /**
+         * Resizes the canvas to fill the viewport and updates dimensions.
+         */
+        function resizeCanvas() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+
+        /**
+         * Clears the particle array and redraws the canvas.
+         */
+        function clearCanvas() {
+            particles = [];
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = '#0d0c1d'; // Restore deep dark background
+            ctx.fillRect(0, 0, width, height);
+        }
+
+        /**
+         * The main animation loop.
+         */
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 1. Gently fade the previous frame to create trails (Ghosting effect)
+            ctx.fillStyle = 'rgba(13, 12, 29, 0.08)'; // Very slight dark overlay
+            ctx.fillRect(0, 0, width, height);
+            
+            // 2. Spawn new particles if the mouse is moving
+            if (mouse.isActive) {
+                // Spawn a few particles at the current mouse location
+                for (let i = 0; i < 4; i++) {
+                    if (particles.length < MAX_PARTICLES) {
+                        particles.push(new Particle(mouse.x, mouse.y));
+                    }
+                }
+                // Cycle the color hue for random colors
+                hue = (hue + 0.5) % 360;
+            }
+            
+            // 3. Update and draw particles
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update();
+                particles[i].draw();
+            }
+
+            // 4. Remove dead particles (opacity <= 0)
+            particles = particles.filter(p => p.opacity > 0);
+            
+            // Reset mouse activity flag
+            mouse.isActive = false;
+        }
+
+        /**
+         * Handles mouse/touch movement and sets the mouse position.
+         */
+        function handleMove(event) {
+            let clientX, clientY;
+
+            // Handle both mouse and touch events
+            if (event.touches) {
+                if (event.touches.length > 0) {
+                    clientX = event.touches[0].clientX;
+                    clientY = event.touches[0].clientY;
+                } else {
+                    return;
+                }
+            } else {
+                clientX = event.clientX;
+                clientY = event.clientY;
+            }
+
+            // Check if the mouse position has actually changed (prevents constant spawning)
+            if (mouse.x !== clientX || mouse.y !== clientY) {
+                mouse.x = clientX;
+                mouse.y = clientY;
+                mouse.isActive = true;
+            }
+        }
+
+
+        // --- Event Listeners and Initialization ---
+
+        window.addEventListener('resize', resizeCanvas);
+        canvas.addEventListener('mousemove', handleMove);
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // Prevents screen scrolling on mobile
+            handleMove(e);
+        });
+
+        // Set up the clear button
+        document.getElementById('clearButton').addEventListener('click', clearCanvas);
+
+        // Initial setup and start the loop
+        resizeCanvas();
+        animate();
+
+    </script>
+
+</body>
+</html>
